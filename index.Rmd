@@ -135,7 +135,7 @@ confusionMatrix(predicted,te$class)
 ```
 
 
-As we can see, we have an accuracy of 96% ; for each class, we have more that 90% sensitivity and specificity.
+As we can see, we have an accuracy of 0.957 ; so we have an out of sample error = 1-0.957 = 0.043.
 
 #Prediction for 20 cases
 Now, let's use our model to predict the 20 cases as requested :

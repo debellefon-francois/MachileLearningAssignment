@@ -1,0 +1,146 @@
+---
+title: "Machine Learning Assignment"
+author: "François de BELLEFON"
+date: "2017, October 15th"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE);
+library(caret)
+library(AppliedPredictiveModeling)
+library(plyr)
+library(dplyr)
+```
+#Overview
+We are going to build a model to predict the manner in which a weight lifting exercice is done, from data collected from sports devices which feature accelerometers.
+
+#Reproducibility : setting seed
+Let's set a seed for reproducibility purposes :
+```{r seedSetting}
+set.seed(42)
+```
+
+
+#Getting the data
+Let's load the data that we will use to train the model.
+```{r dataDownload}
+exerciseData <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+```
+
+
+
+
+
+#Taking a look at our data
+First of all, let's take a look at our dara :
+```{r dataSummary}
+str(exerciseData)
+```
+
+##Columns classifications
+We can categorise the data in 3 categories :
+
+- Data identifying the observation (Data regarding the test index, the user name, the timestamp and the fact that we are or not in a new time window. )
+- Raw measurements
+- Data derived from the raw mesurements (total, kurtosis, skewness, minimal, maximal, amplitude, variance, standard deviation, average)
+
+
+##Missing data analysis
+As we can see, there are a lot of missing data (NA or empty).
+
+Let's see which columns have more than 90% missing data :
+```{r isDataMissing}
+missingDataCols <- names(exerciseData[which(colSums(exerciseData == '' | is.na(exerciseData))/nrow(exerciseData)*100 > 90)])
+missingDataCols
+```
+As we can see, the columns with the most missing data are not the raw data, byt the ones which are derived from the raw data.
+
+
+##Class imbalance analysis
+
+Let's also see how balanced our data classes are :
+```{r isDataBalanced}
+table(exerciseData$classe)
+```
+As we can see, class "A" is over represented in our sample. It may lead to imbalance when training our model. We will deal with it when training it.
+
+
+
+#Model building and testing
+Now, let's get to the proper building and testing of our model.
+
+
+##Training and testing set
+Let's divide this data into a training set (which we will use to train our model) and a test set (which we will use to see if our model is correct).
+```{r dataPartition}
+inTrain = createDataPartition(exerciseData$classe, p = 3/4)[[1]]
+tr <- exerciseData[inTrain,]
+te <- exerciseData[-inTrain,]
+```
+
+## Model Building
+### Problem type and model selection
+We have a supervised classification problem : we want to categorize new data into determined categories.
+
+We are going to use Gradient Boosting Model (gbm).
+
+###Feature selection
+
+Let's now select the feature that we will use.
+
+As we saw before when examining our data :
+
+- Some columns are only there to identify the measurement and are not relevant as features.
+- Some columns are derived from the raw data ; so keeping them in addition to the raw data may lead to unnecessary variance. Also, we saw when examining our data that the derived data had a majority of NA and empty values ; so we remove these derived data.
+
+Let's actually remove these columns :
+
+
+```{r trainingFeaturesSelection}
+tr2 <- select(tr,-starts_with("var"),-starts_with("min"),-starts_with("max"),-starts_with("avg"),-starts_with("skewness"),-starts_with("kurtosis"),-starts_with("stddev"),-starts_with("amplitude"),-matches("X"),-(1:7))
+```
+
+###Data preprocessing
+####Cross Validation
+We are going to chose a way to validate our model.
+
+We'll use k-fold Cross Validation : we will devide the training data in 10 equal sized subsamples, train the model with 9 of these 10 subsamples, validate in on the 10th, and do it again with the other subsamples.
+
+####Class imbalance
+As we have seen before, class A is more represented than the others.
+
+We are going to deal with this class imbalance by  using upsampling in the control training parameters : this randomly replicates instances of the minority classes.
+
+
+Let's implement this data preprocessing :
+
+```{r controlParameter}
+Ctrl <- trainControl(method="cv",number=10,sampling="up")
+```
+
+###Training the model
+
+Now, let's actually train our gbm model with our selected features, our oversampling options and the k-fold validation as mentionned before :
+```{r modelTraining}
+modFit <- train(classe~.,method="gbm",trControl=Ctrl,data=tr2,verbose=FALSE)
+```
+
+#Model evaluation
+##Evaluation on the test set
+Let's do a prediction with the test set (te) that we defined earlier, and evaluate the result in comparison with the actual values :
+```{r modelEvaluation}
+predicted <- predict(modFit,newdata = te)
+confusionMatrix(predicted,te$class)
+```
+
+
+As we can see, we have an accuracy of 96% ; for each class, we have more that 90% sensitivity and specificity.
+
+#Prediction for 20 cases
+Now, let's use our model to predict the 20 cases as requested :
+```{r 20CasesEvaluation}
+#Test set
+testData <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+predict(modFit,testData)
+```
